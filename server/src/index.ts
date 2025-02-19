@@ -9,11 +9,32 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 app.use(cors());
-
 app.use(express.json());
 
 const uri = "mongodb://localhost:27017";
 const client = new MongoClient(uri);
+
+let messageBuffer: { text: string; date: Date }[] = [];
+const BUFFER_SIZE = 10;
+const TIMEOUT = 1000;
+
+async function flushBuffer() {
+  if (messageBuffer.length > 0) {
+    const messagesToInsert = [...messageBuffer];
+    messageBuffer = [];
+
+    try {
+      const db = client.db("wsapp");
+      const collection = db.collection("messages");
+      await collection.insertMany(messagesToInsert);
+      console.log(`Inserted ${messagesToInsert.length} messages into MongoDB`);
+    } catch (err) {
+      console.error("Error inserting messages into MongoDB:", err);
+    }
+  }
+}
+
+let timeout: NodeJS.Timeout | null = null;
 
 async function run() {
   try {
@@ -22,6 +43,39 @@ async function run() {
 
     const db = client.db("wsapp");
     const collection = db.collection("messages");
+
+    wss.on("connection", (ws) => {
+      console.log("New client connected");
+
+      ws.on("message", async (message) => {
+        try {
+          console.log(`Received: ${message}`);
+          const messageData = { text: message.toString(), date: new Date() };
+
+          messageBuffer.push(messageData);
+
+          if (messageBuffer.length >= BUFFER_SIZE) {
+            await flushBuffer();
+          }
+
+          if (!timeout) {
+            timeout = setTimeout(async () => {
+              await flushBuffer();
+              timeout = null;
+            }, TIMEOUT);
+          }
+
+          ws.send(`Echo: ${message}`);
+        } catch (err) {
+          console.error("Error handling WebSocket message:", err);
+          ws.send("Error: Failed to process your message");
+        }
+      });
+
+      ws.on("close", () => {
+        console.log("Client disconnected");
+      });
+    });
 
     app.post("/messages", (req: Request, res: Response) => {
       (async () => {
@@ -32,8 +86,22 @@ async function run() {
             return res.status(400).json({ error: "Text is required" });
           }
 
-          const result = await collection.insertOne({ text, date: new Date() });
-          res.status(201).json({ id: result.insertedId, text });
+          const messageData = { text, date: new Date() };
+
+          messageBuffer.push(messageData);
+
+          if (messageBuffer.length >= BUFFER_SIZE) {
+            await flushBuffer();
+          }
+
+          if (!timeout) {
+            timeout = setTimeout(async () => {
+              await flushBuffer();
+              timeout = null;
+            }, TIMEOUT);
+          }
+
+          res.status(201).json({ text });
         } catch (err) {
           console.error("Error creating message:", err);
           res.status(500).json({ error: "Internal server error" });

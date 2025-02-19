@@ -1,24 +1,35 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { useQuery } from "@tanstack/react-query";
+
+interface Message {
+  _id: string;
+  text: string;
+}
+
+const fetchMessages = async (): Promise<Message[]> => {
+  const response = await fetch("http://localhost:3000/messages");
+  if (!response.ok) {
+    throw new Error("Failed to fetch messages");
+  }
+  return response.json();
+};
 
 function App() {
+  const { data, isLoading, error } = useQuery<Message[], Error>({
+    queryKey: ["messages"],
+    queryFn: fetchMessages,
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div>
+      <h1>Messages</h1>
+      <ul>
+        {(data || []).map((message) => (
+          <li key={message._id}>{message.text}</li>
+        ))}
+      </ul>
     </div>
   );
 }

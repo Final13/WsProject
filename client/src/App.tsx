@@ -31,7 +31,7 @@ const postMessage = async (text: string): Promise<Message> => {
 function App() {
   const [inputText, setInputText] = useState("");
 
-  const { data, isLoading, error, refetch } = useQuery<Message[]>({
+  const { data, error, refetch } = useQuery<Message[]>({
     queryKey: ["messages"],
     queryFn: fetchMessages,
   });

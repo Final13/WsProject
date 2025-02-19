@@ -2,10 +2,13 @@ import express, { Request, Response } from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
 import { MongoClient } from "mongodb";
+import cors from "cors";
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+
+app.use(cors());
 
 app.use(express.json());
 

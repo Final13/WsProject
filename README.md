@@ -12,14 +12,14 @@ mongosh
 > rs.initiate()
 ```
 ### 2. Start the server
+Run this command from the root:
 ```
 cd server && npm install && npm run dev
-
-The server will start at http://localhost:3001
 ```
+The server will start at http://localhost:3001
 ### 3. Start the client
+Run this command from the root:
 ```
 cd client && npm install && npm start
-
-The client will start at http://localhost:3000
 ```
+The client will start at http://localhost:3000

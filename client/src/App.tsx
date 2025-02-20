@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 
 interface Message {
   _id: string;
@@ -30,18 +30,33 @@ const postMessage = async (text: string): Promise<Message> => {
 
 function App() {
   const [inputText, setInputText] = useState("");
+  const queryClient = useQueryClient();
 
-  const { data, error, refetch } = useQuery<Message[]>({
+  const { data, error } = useQuery<Message[]>({
     queryKey: ["messages"],
     queryFn: fetchMessages,
+    staleTime: Infinity,
   });
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:3001");
+
+    ws.onmessage = (event) => {
+      const newMessage: Message = JSON.parse(event.data);
+      queryClient.setQueryData<Message[]>(["messages"], (oldMessages = []) => [
+        ...oldMessages,
+        newMessage,
+      ]);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [queryClient]);
 
   const mutation = useMutation({
     mutationFn: postMessage,
-    onSuccess: () => {
-      refetch();
-      setInputText("");
-    },
+    onSuccess: () => setInputText(""),
   });
 
   const handleSubmit = (e: React.FormEvent) => {

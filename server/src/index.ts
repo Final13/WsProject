@@ -1,7 +1,7 @@
 import express, { Request, Response } from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
-import { MongoClient } from "mongodb";
+import { MongoClient, ChangeStream } from "mongodb";
 import cors from "cors";
 
 const app = express();
@@ -36,6 +36,16 @@ async function flushBuffer() {
 
 let timeout: NodeJS.Timeout | null = null;
 
+function broadcastMessage(message: any) {
+  wss.clients.forEach((client) => {
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify(message));
+    }
+  });
+}
+
+let changeStream: ChangeStream;
+
 async function run() {
   try {
     await client.connect();
@@ -44,8 +54,26 @@ async function run() {
     const db = client.db("wsapp");
     const collection = db.collection("messages");
 
+    changeStream = collection.watch([], { fullDocument: "updateLookup" });
+
+    changeStream.on("change", (change) => {
+      if (change.operationType === "insert") {
+        const message = change.fullDocument;
+        broadcastMessage(message);
+      }
+    });
+
     wss.on("connection", (ws) => {
       console.log("New client connected");
+
+      (async () => {
+        try {
+          const messages = await collection.find().toArray();
+          ws.send(JSON.stringify({ type: "initial", messages }));
+        } catch (err) {
+          console.error("Error fetching initial messages:", err);
+        }
+      })();
 
       ws.on("message", async (message) => {
         try {
@@ -131,3 +159,12 @@ async function run() {
 }
 
 run();
+
+process.on("SIGINT", async () => {
+  console.log("Shutting down server...");
+  if (changeStream) {
+    await changeStream.close();
+  }
+  await client.close();
+  process.exit();
+});
